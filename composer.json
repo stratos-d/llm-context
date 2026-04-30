@@ -1,0 +1,6 @@
+{
+    "name": "stratos-0/llm-context",
+    "description": "Personal LLM guidelines for Laravel modular monolith applications.",
+    "type": "library",
+    "license": "MIT"
+}
