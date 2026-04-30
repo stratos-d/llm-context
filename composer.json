@@ -1,5 +1,5 @@
 {
-    "name": "stratos-0/llm-context",
+    "name": "stratos-d/llm-context",
     "description": "Personal LLM guidelines for Laravel modular monolith applications.",
     "type": "library",
     "license": "MIT"
