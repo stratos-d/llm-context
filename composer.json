@@ -2,5 +2,8 @@
     "name": "stratos-d/llm-context",
     "description": "Personal LLM guidelines for Laravel modular monolith applications.",
     "type": "library",
-    "license": "MIT"
+    "license": "MIT",
+    "scripts": {
+        "docs:bundle": "@php bin/bundle-docs.php"
+    }
 }
