@@ -42,22 +42,22 @@ If a repository method sounds like a use case (`cancelOrder`, `grantAccess`, `ar
 Concrete repositories live in Infrastructure because they are persistence adapters:
 
 ```text
-app/Infrastructure/Eloquent/Repositories/Orders/EloquentOrderRepository.php
+app/Infrastructure/Eloquent/Repositories/Orders/OrderRepository.php
 ```
 
 Introduce an interface only when a second implementation exists or is imminent; it lives with the caller (`app/Application/Orders/Contracts/OrderRepository.php`), or rarely in a domain context's published contracts. With a single implementation, inject the concrete class directly.
 
 ## Naming
 
-- Concrete class: `<Mechanism><Aggregate>Repository`, e.g. `EloquentOrderRepository`.
-- Interface when justified: `<Aggregate>Repository`.
+- **Concrete class: `<Aggregate>Repository`**, e.g. `OrderRepository`. The `Infrastructure/Eloquent/Repositories/` location already conveys the mechanism, so the class name does not restate it — same principle as [Conventions § avoid](../conventions.md#avoid) (no suffix/prefix that restates the folder).
+- **When a port is justified** (≥2 implementations): the **interface** takes the bare `<Aggregate>Repository` name, and each concrete is disambiguated by its mechanism prefix — `EloquentOrderRepository`, `ApiOrderRepository` — implementing `OrderRepository`. Promoting a single concrete to a port is a mechanical rename at that point.
 - Methods named by intent: `find`, `save`, `findByEmail`, `nextPendingReview` — not `whereStatusAndReviewer`.
-- **Injected property:** the persistence-mechanism prefix may be dropped — `EloquentOrderRepository $orderRepository` (preferred) or `$eloquentOrderRepository` (allowed). See [Conventions § variable names match the class](../conventions.md#naming).
+- **Injected property:** `$orderRepository` (the class name camelCased). When a mechanism-prefixed concrete is injected directly (a port coexists), the prefix may drop in the property — `EloquentOrderRepository $orderRepository`. See [Conventions § variable names match the class](../conventions.md#naming).
 
 ## Skeleton
 
 ```php
-final class EloquentOrderRepository
+final class OrderRepository
 {
     public function find(OrderId $orderId): ?Order
     {
