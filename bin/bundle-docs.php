@@ -5,129 +5,85 @@ declare(strict_types=1);
 final class DocsBundler
 {
     /**
-     * @param list<string> $preferredFiles
-     * @param list<string> $orderedDocsFiles
-     * @param list<string> $allMarkdownFiles
-     * @return list<string>
+     * @var array<string, string>
      */
-    public function orderedFiles(
-        array $preferredFiles,
-        array $orderedDocsFiles,
-        array $allMarkdownFiles,
-    ): array {
-        $orderedFiles = [];
+    private const BUNDLES = [
+        'global' => 'build/docs-global-rules.md',
+        'backend' => 'build/docs-backend-data-http.md',
+        'frontend' => 'build/docs-frontend.md',
+    ];
 
-        foreach ([$preferredFiles, $orderedDocsFiles, $allMarkdownFiles] as $fileGroup) {
-            foreach ($fileGroup as $file) {
-                if (! isset($orderedFiles[$file])) {
-                    $orderedFiles[$file] = true;
-                }
-            }
-        }
+    /**
+     * @return array<string, list<string>>
+     */
+    public function bundleFiles(string $rootPath): array
+    {
+        $orderedDocs = $this->discoverDocsFiles($rootPath);
 
-        return array_keys($orderedFiles);
+        return [
+            'global' => array_values(array_filter(
+                $orderedDocs,
+                static fn (string $path): bool => str_starts_with($path, 'docs/')
+                    && ! str_starts_with($path, 'docs/data/')
+                    && ! str_starts_with($path, 'docs/http/')
+                    && ! str_starts_with($path, 'docs/frontend/'),
+            )),
+            'backend' => array_values(array_filter(
+                $orderedDocs,
+                static fn (string $path): bool => str_starts_with($path, 'docs/data/')
+                    || str_starts_with($path, 'docs/http/'),
+            )),
+            'frontend' => array_values(array_filter(
+                $orderedDocs,
+                static fn (string $path): bool => str_starts_with($path, 'docs/frontend/'),
+            )),
+        ];
     }
 
-    public function bundle(string $rootPath, string $outputPath): void
+    public function bundle(string $rootPath): void
     {
-        $normalizedOutputPath = $this->normalizePath($outputPath);
-        $sourceFiles = $this->discoverSourceFiles($rootPath, $normalizedOutputPath);
-        $absoluteOutputPath = $rootPath . DIRECTORY_SEPARATOR . $normalizedOutputPath;
-        $outputDirectory = dirname($absoluteOutputPath);
+        $bundles = $this->bundleFiles($rootPath);
+        $generatedFiles = [];
 
-        if (! is_dir($outputDirectory) && ! mkdir($outputDirectory, 0777, true) && ! is_dir($outputDirectory)) {
-            throw new RuntimeException(sprintf('Unable to create output directory [%s].', $outputDirectory));
+        foreach ($bundles as $bundleName => $sourceFiles) {
+            $outputPath = self::BUNDLES[$bundleName];
+            $absoluteOutputPath = $rootPath . DIRECTORY_SEPARATOR . $outputPath;
+            $outputDirectory = dirname($absoluteOutputPath);
+
+            if (! is_dir($outputDirectory) && ! mkdir($outputDirectory, 0777, true) && ! is_dir($outputDirectory)) {
+                throw new RuntimeException(sprintf('Unable to create output directory [%s].', $outputDirectory));
+            }
+
+            $bundleContents = $this->renderBundle(
+                $this->bundleTitle($bundleName),
+                $sourceFiles,
+                $rootPath,
+                $outputPath,
+            );
+
+            if (file_put_contents($absoluteOutputPath, $bundleContents) === false) {
+                throw new RuntimeException(sprintf('Unable to write bundle to [%s].', $outputPath));
+            }
+
+            $generatedFiles[] = sprintf('%s (%d files)', $outputPath, count($sourceFiles));
         }
 
-        $bundle = $this->renderBundle($sourceFiles, $rootPath, $normalizedOutputPath);
+        fwrite(STDOUT, "Generated documentation bundles:\n");
 
-        if (file_put_contents($absoluteOutputPath, $bundle) === false) {
-            throw new RuntimeException(sprintf('Unable to write bundle to [%s].', $normalizedOutputPath));
+        foreach ($generatedFiles as $generatedFile) {
+            fwrite(STDOUT, sprintf("- %s\n", $generatedFile));
         }
-
-        fwrite(
-            STDOUT,
-            sprintf(
-                "Bundled %d markdown files into %s\n",
-                count($sourceFiles),
-                $normalizedOutputPath,
-            ),
-        );
     }
 
     /**
      * @return list<string>
      */
-    private function discoverSourceFiles(string $rootPath, string $outputPath): array
-    {
-        $allMarkdownFiles = $this->discoverAllMarkdownFiles($rootPath, $outputPath);
-        $preferredFiles = array_values(array_filter([
-            'README.md',
-            'AGENTS.md',
-            'CLAUDE.md',
-            'docs/README.md',
-        ], static fn (string $path): bool => is_file($rootPath . DIRECTORY_SEPARATOR . $path)));
-
-        return $this->orderedFiles(
-            $preferredFiles,
-            $this->discoverDocsReadmeFiles($rootPath),
-            $allMarkdownFiles,
-        );
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function discoverAllMarkdownFiles(string $rootPath, string $outputPath): array
-    {
-        $markdownFiles = [];
-        $directoryIterator = new RecursiveDirectoryIterator(
-            $rootPath,
-            FilesystemIterator::SKIP_DOTS,
-        );
-
-        $filterIterator = new RecursiveCallbackFilterIterator(
-            $directoryIterator,
-            function (SplFileInfo $file, string $path): bool {
-                if ($file->isDir()) {
-                    return ! in_array($file->getFilename(), ['.git', '.idea', 'build', 'vendor', 'node_modules'], true);
-                }
-
-                return true;
-            },
-        );
-
-        $iterator = new RecursiveIteratorIterator($filterIterator);
-
-        /** @var SplFileInfo $file */
-        foreach ($iterator as $file) {
-            if (! $file->isFile() || $file->getExtension() !== 'md') {
-                continue;
-            }
-
-            $relativePath = $this->relativePath($rootPath, $file->getPathname());
-
-            if ($relativePath === $outputPath) {
-                continue;
-            }
-
-            $markdownFiles[] = $relativePath;
-        }
-
-        sort($markdownFiles);
-
-        return $markdownFiles;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function discoverDocsReadmeFiles(string $rootPath): array
+    private function discoverDocsFiles(string $rootPath): array
     {
         $docsReadmePath = $rootPath . DIRECTORY_SEPARATOR . 'docs/README.md';
 
         if (! is_file($docsReadmePath)) {
-            return [];
+            throw new RuntimeException('docs/README.md was not found.');
         }
 
         $docsReadme = file_get_contents($docsReadmePath);
@@ -138,7 +94,7 @@ final class DocsBundler
 
         preg_match_all('/\[[^\]]+\]\(([^)]+)\)/', $docsReadme, $matches);
 
-        $orderedFiles = [];
+        $orderedFiles = ['docs/README.md' => true];
 
         foreach ($matches[1] as $target) {
             if (! is_string($target)) {
@@ -153,9 +109,13 @@ final class DocsBundler
 
             $resolvedPath = $this->resolveRelativePath('docs', $path);
 
-            if (is_file($rootPath . DIRECTORY_SEPARATOR . $resolvedPath) && ! isset($orderedFiles[$resolvedPath])) {
+            if (is_file($rootPath . DIRECTORY_SEPARATOR . $resolvedPath)) {
                 $orderedFiles[$resolvedPath] = true;
             }
+        }
+
+        foreach ($this->allDocsFiles($rootPath) as $relativePath) {
+            $orderedFiles[$relativePath] = true;
         }
 
         return array_keys($orderedFiles);
@@ -164,10 +124,14 @@ final class DocsBundler
     /**
      * @param list<string> $sourceFiles
      */
-    private function renderBundle(array $sourceFiles, string $rootPath, string $outputPath): string
-    {
+    private function renderBundle(
+        string $title,
+        array $sourceFiles,
+        string $rootPath,
+        string $outputPath,
+    ): string {
         $sections = [
-            '# Documentation Bundle',
+            sprintf('# %s', $title),
             '',
             'This file is generated by `composer docs:bundle`. Do not edit it directly.',
             '',
@@ -197,6 +161,16 @@ final class DocsBundler
         $sections[] = '';
 
         return implode("\n", $sections);
+    }
+
+    private function bundleTitle(string $bundleName): string
+    {
+        return match ($bundleName) {
+            'global' => 'Documentation Bundle: Global Rules',
+            'backend' => 'Documentation Bundle: Backend Data + HTTP',
+            'frontend' => 'Documentation Bundle: Frontend',
+            default => 'Documentation Bundle',
+        };
     }
 
     private function rewriteLocalLinks(string $contents, string $sourceFile, string $outputPath): string
@@ -251,6 +225,11 @@ final class DocsBundler
         ];
     }
 
+    private function extractPathFromLink(string $target): string
+    {
+        return $this->splitLinkTarget(trim($target))[0];
+    }
+
     private function resolveRelativePath(string $sourceDirectory, string $path): string
     {
         if (str_starts_with($path, '/')) {
@@ -262,6 +241,38 @@ final class DocsBundler
         }
 
         return $this->normalizePath($sourceDirectory . '/' . $path);
+    }
+
+    private function relativePath(string $basePath, string $targetPath): string
+    {
+        return $this->rebasePath($basePath, $targetPath);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function allDocsFiles(string $rootPath): array
+    {
+        $docsFiles = [];
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(
+                $rootPath . DIRECTORY_SEPARATOR . 'docs',
+                FilesystemIterator::SKIP_DOTS,
+            ),
+        );
+
+        /** @var SplFileInfo $file */
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'md') {
+                continue;
+            }
+
+            $docsFiles[] = $this->relativePath($rootPath, $file->getPathname());
+        }
+
+        sort($docsFiles);
+
+        return $docsFiles;
     }
 
     private function rebasePath(string $fromDirectory, string $toPath): string
@@ -294,12 +305,10 @@ final class DocsBundler
             return [];
         }
 
-        return array_values(array_filter(explode('/', $normalizedPath), static fn (string $segment): bool => $segment !== ''));
-    }
-
-    private function extractPathFromLink(string $target): string
-    {
-        return $this->splitLinkTarget(trim($target))[0];
+        return array_values(array_filter(
+            explode('/', $normalizedPath),
+            static fn (string $segment): bool => $segment !== '',
+        ));
     }
 
     private function normalizePath(string $path): string
@@ -323,19 +332,13 @@ final class DocsBundler
 
         return implode('/', $segments);
     }
-
-    private function relativePath(string $basePath, string $targetPath): string
-    {
-        return $this->rebasePath($basePath, $targetPath);
-    }
 }
 
 $rootPath = dirname(__DIR__);
-$outputPath = $argv[1] ?? 'build/llm-context-docs.md';
 $bundler = new DocsBundler();
 
 try {
-    $bundler->bundle($rootPath, $outputPath);
+    $bundler->bundle($rootPath);
 } catch (Throwable $throwable) {
     fwrite(STDERR, $throwable->getMessage() . "\n");
 
