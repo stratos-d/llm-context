@@ -52,10 +52,12 @@ If a code review surfaces any signal below, the change needs a boundary fix befo
 
 | Signal | Problem | Right shape |
 |---|---|---|
-| Paginated/list query in repository | Repository used as read model | Application query/read model |
-| Read model returns Eloquent collection/model | Projection leaks persistence model | DTO row/page/result |
-| Read model writes state or emits events | Read side mutates | Application action / domain event listener |
-| Controller builds large inline array from many models | Response shaping and query mixed | Application query + resource/view model |
+| Query executed outside a reader/repository (action, controller, resource, service) | Data access scattered; unauditable | Move the read to a `{Context}Reader`, the write to a `Repository` |
+| Paginated/list query in a repository | Repository used as a read model | `{Context}Reader` |
+| Reader returns Eloquent collection/model | Projection leaks persistence model | DTO row/page/result |
+| Reader writes state or emits events | Read side mutates | Application action / domain event listener |
+| Controller builds large inline array from many models | Response shaping and query mixed | `{Context}Reader` + resource/view model |
+| One reader class per screen | Reads fragmented across classes | Group the context's reads in its `{Context}Reader` |
 
 ## Abstraction misuse
 

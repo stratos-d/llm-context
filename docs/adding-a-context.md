@@ -74,16 +74,16 @@ final readonly class CancelOrderAction
 
 ## Read flow
 
-Use Application queries/read models for list/table/dashboard/report screens:
+Group the context's reads in a single `{Context}Reader` for list/table/dashboard/report screens and decision support:
 
 ```text
-app/Application/<Context>/Queries/List<Aggregates>Query.php
+app/Domains/<Context>/ReadModels/<Context>Reader.php
+app/Domains/<Context>/ReadModels/<Aggregate>ListRow.php
+app/Domains/<Context>/ReadModels/<Aggregate>ListPage.php
 app/Application/<Context>/Filters/<Aggregate>ListFilter.php
-app/Application/<Context>/ReadModels/<Aggregate>ListRow.php
-app/Application/<Context>/ReadModels/<Aggregate>ListPage.php
 ```
 
-Request data builds pure filter DTOs. Do not pass HTTP request objects into Application query/filter/read-model classes.
+Query execution lives only in the reader (reads) or a repository (writes) — see [Read models § the data-access rule](../application/read-models.md#the-data-access-rule). Request data builds pure filter DTOs; do not pass HTTP request objects into a reader or filter.
 
 ## Cross-context references
 

@@ -23,7 +23,7 @@ This directory holds reusable architectural and operational guidance for Laravel
 - [Models](data/models.md) — Eloquent aggregate roots/parts, meaningful behavior, persistence boundary.
 - [Value objects](data/value-objects.md) — value-object and identity-object rules.
 - [Builders](data/builders.md) — reusable same-context Eloquent constraints.
-- [Repositories](data/repositories.md) — optional aggregate persistence abstraction.
+- [Repositories](data/repositories.md) — required-when-used aggregate persistence (write side).
 - [Factories](data/factories.md) — factory location and conventions.
 
 ### Application
@@ -33,7 +33,7 @@ This directory holds reusable architectural and operational guidance for Laravel
 - [Jobs](jobs.md) — queued use-case delivery.
 - [Domain events](domain-events.md) — event naming, payloads, aggregate recording, dispatch timing.
 - [Services](services.md) — concrete service wrappers around framework/vendor SDKs.
-- [Read models](application/read-models.md) — Application queries, filters, and projection DTOs.
+- [Read models](application/read-models.md) — the `{Context}Reader` read surface, the data-access rule, filters, and projection DTOs.
 
 ### HTTP / Delivery
 

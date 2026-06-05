@@ -53,7 +53,8 @@ tests/Feature/<EntryPoint>/<Feature>Test.php
 tests/Unit/Application/<UseCase>/<Action>Test.php
 tests/Unit/Domains/<Context>/Models/<Aggregate>Test.php
 tests/Unit/Domains/<Context>/ValueObjects/<ValueObject>Test.php
-tests/Integration/Application/<Context>/Queries/<Query>Test.php
+tests/Integration/Domains/<Context>/ReadModels/<Context>ReaderTest.php
+tests/Integration/Infrastructure/Eloquent/Repositories/<Aggregate>/<Repository>Test.php
 tests/Integration/Infrastructure/<Capability>/<Strategy>/<Service>Test.php
 ```
 

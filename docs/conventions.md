@@ -123,6 +123,7 @@ Edge cases:
 - **Stylistic class capitalization** (e.g. `LogIn`, `LogOut`, `XmlParser`) collapses into the conventional word form in the variable: `$loginEmployeeAction`, `$logoutEmployeeAction`, `$xmlParser`. The variable is normal English, not a re-statement of the class casing.
 - **Acronyms in class names** lowercase the leading acronym in the variable: `Google2FA $google2fa`, `JsonResponse $jsonResponse`, `XMLParser $xmlParser`.
 - **Local variables** holding a single instance of a class follow the same rule (`$twoFactorAuthenticator = new TwoFactorAuthenticator(...)`), unless a tighter, equally-clear name is justified by context (`$activeEmployee` over `$employee` when there are two `Employee` instances in scope).
+- **A repository's persistence-mechanism prefix may be dropped.** `EloquentOrderRepository $orderRepository` is preferred; `$eloquentOrderRepository` is also allowed. The `Eloquent`/strategy prefix is storage noise at the call site, and `orderRepository` stays unique and grep-friendly. This narrow exception is for the persistence prefix only — it does not license role-only shorthands (`$repository`, `$orders`) or dropping a *meaningful* strategy prefix elsewhere (a `SessionEmployeeAuthenticator` is still `$sessionEmployeeAuthenticator`, because `Session` distinguishes it from other authenticators).
 
 ## Type declarations
 
@@ -195,6 +196,46 @@ public function getEmployeesByIds(array $ids): array { /* … */ }
 ```
 
 Here the return type `array` is abstract and the `@throws` is not inferable.
+
+### Don't narrate the class or method
+
+A docblock that *describes what a class or method is for* — in prose, not types — is forbidden. The class name plus its folder already state the role; the method name plus its body already state the behavior. Narration restates them and then drifts.
+
+Forbidden:
+
+```php
+/**
+ * Persistence adapter for the Employee aggregate. All employee writes and
+ * load-to-mutate reads go through here, so no action or controller touches
+ * the query layer directly.
+ */
+final class EloquentEmployeeRepository { /* … */ }
+```
+
+```php
+/**
+ * Persist the actor's role/permission grants through the Spatie storage binding.
+ */
+public function syncAccess(Employee $employee, array $roles, array $permissions): void { /* … */ }
+```
+
+Both blocks say only what the name and signature already say. Delete them. If a class's purpose isn't clear from its name and location, rename it; if a method's behavior isn't clear from its name and body, rename it or extract a well-named private method.
+
+### The only narrative exception
+
+A prose comment (PHPDoc or, here only, a short `//`) is allowed when it explains something a reader **cannot** infer from correct, conventional code:
+
+- behavior that is **temporary** or a known stopgap (with the condition for removal),
+- code that deliberately goes **against the documented convention** (and why),
+- a genuinely **complex or unconventional** mechanism whose *why* is non-obvious (an ordering subtlety, a concurrency or security reason, a third-party quirk).
+
+The test: if the comment explains *why this code is not what a reader would expect*, keep it. If it explains *what the code does*, delete it. Example of an allowed comment:
+
+```php
+// owned/assigned scopes resolve to bounded id sets; none exist for the current
+// population, so anything short of an `all` scope denies — revisit when memberships land.
+return $hasAllScope ? ScopeSpecification::all() : ScopeSpecification::none();
+```
 
 ### Abstract types always get a shape
 

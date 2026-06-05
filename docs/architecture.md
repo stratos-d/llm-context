@@ -56,11 +56,10 @@ app/
 │       │   └── <Verb><Noun>Action.php       ← use-case write orchestration
 │       ├── Jobs/
 │       │   └── <Verb><Noun>Job.php          ← thin queued wrapper around an action
-│       ├── Queries/
-│       │   └── <Verb><Noun>Query.php        ← read use case
 │       ├── Filters/
 │       │   └── <Noun>Filter.php             ← pure filter/input DTOs
-│       ├── ReadModels/
+│       ├── ReadModels/                      ← cross-context readers live here
+│       │   ├── <UseCase>Reader.php          ← read surface (queries grouped)
 │       │   ├── <Noun>Row.php
 │       │   └── <Noun>Page.php
 │       ├── Contracts/                       ← only when an interface is justified
@@ -121,7 +120,8 @@ Create folders only when there are files to put in them.
 | Request data | `Interfaces/<EntryPoint>/Requests/` | Validate, authorize caller/resource when appropriate, expose typed input | Persistence, mutation, query execution |
 | Resource/View model | `Interfaces/<EntryPoint>/Resources`, `ViewModels` | Response/page-prop shaping | Business behavior, writes |
 | Application action/input | `Application/<UseCase>/` | Write use case orchestration, use-case input DTOs, transaction boundary, persistence coordination | HTTP/session/Inertia concerns, request data classes, owning aggregate invariants |
-| Application query/read model | `Application/<Context>/Queries`, `ReadModels`, `Filters` | Read-side query use cases and DTO projections | Writes, business behavior mutation, request objects |
+| Context reader (read model) | `Domains/<Context>/ReadModels/` (single-context), `Application/<UseCase>/ReadModels/` (cross-context) | The context's read surface: tuned queries returning DTOs/scalars/booleans, including authorization-decision support | Writes, business mutation, request objects |
+| Repository | `Infrastructure/Eloquent/Repositories/<Aggregate>/` | Aggregate load-to-mutate and save (the only write-side query home) | Screen/list queries (that is a reader), use-case orchestration |
 | Aggregate root/model | `Domains/<Context>/Models/` | State, casts, relationships, meaningful behavior, invariant protection | Saving itself, framework delivery concerns, cross-context model imports |
 | Builder | `Domains/<Context>/Builders/` | Reusable same-context Eloquent constraints | Writes, request parsing, response shaping |
 | Domain event | `Domains/<Context>/Events/` | Published fact that happened in a context | Eloquent models in payloads, side effects |

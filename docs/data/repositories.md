@@ -2,57 +2,40 @@
 
 > **Owns**
 >
-> - When to introduce a repository
-> - Repository placement and naming
-> - How repositories relate to aggregate persistence
+> - The write-side half of the data-access rule
+> - When a repository is required vs. not created
+> - Repository placement, naming, and the property-naming allowance
 >
 > **Forbids**
 >
-> - A repository for every model
-> - Thin wrappers over `Model::query()` or `saveOrFail()`
+> - Aggregate load/save inline in an action, controller, resource, or service
+> - A speculative repository with nothing to persist
 > - Repositories owning use-case transaction boundaries
-> - Repositories for paginated screen queries — see [Read models](../application/read-models.md)
+> - Repositories for screen queries — that is a reader, see [Read models](../application/read-models.md)
 >
-> **See also**: [Models](models.md), [Builders](builders.md), [Actions](../actions.md), [Transactions](../transactions.md), [Read models](../application/read-models.md)
+> **See also**: [Read models](../application/read-models.md), [Models](models.md), [Builders](builders.md), [Actions](../actions.md), [Transactions](../transactions.md)
 
-A repository is optional. It loads and saves aggregates when direct Eloquent loading/saving would leak persistence details into the Application action.
+A repository is the **write-side** half of the [data-access rule](../application/read-models.md#the-data-access-rule): aggregate load-to-mutate and save go through a repository, never inline in an action or controller. Reads go through a [`{Context}Reader`](../application/read-models.md); nothing else executes queries.
 
-Default posture:
+## Required when used, never speculative
 
-```text
-Application action loads aggregate with Eloquent/builder
-Application action calls aggregate behavior
-Application action calls saveOrFail()
-```
+Do **not** create a repository with nothing to persist. But the moment a context has *any* aggregate write or load-to-mutate, it goes in a repository — it is not left inline "because it's simple." This is the deliberate trade for the data-access rule: one obvious home per aggregate's persistence, no stray `Model::query()` / `save()` scattered across actions and controllers.
 
-Introduce a repository only when that default becomes unclear or unsafe.
-
-## When to introduce one
-
-Use a repository when at least one is true:
-
-1. **Aggregate persistence spans root + children** and callers should not know the save order.
-2. **Aggregate loading is materially different from table shape** and must hydrate a complete consistency boundary.
-3. **The persistence mechanism is genuinely variable** or external.
-4. **The repository name describes a domain persistence capability**, not a query convenience.
-
-Do not introduce a repository just to be "DDD" or "testable." Eloquent-backed code is tested with factories and the database.
+A repository loads and saves aggregate roots through their root (children cascade from the root, per [Models](models.md)).
 
 ## Transaction boundary
 
-Application actions own use-case transactions. Repositories may perform narrow persistence internals, but they should not decide the use-case boundary.
-
-Preferred flow:
+Application actions own use-case transactions. Repositories perform persistence internals; they do not decide the use-case boundary.
 
 ```text
 Application action opens transaction
-Application action loads aggregate
+Application action loads aggregate (repository)
 Application action calls aggregate behavior
-Repository/action persists aggregate
+Repository persists aggregate
 Application action dispatches events after persistence/commit
 ```
 
-If a repository method sounds like a use case (`cancelOrder`, `grantAccess`, `archiveOrganization`), it is probably an Application action.
+If a repository method sounds like a use case (`cancelOrder`, `grantAccess`, `archiveOrganization`), it is an Application action, not a repository method.
 
 ## Placement
 
@@ -62,19 +45,14 @@ Concrete repositories live in Infrastructure because they are persistence adapte
 app/Infrastructure/Eloquent/Repositories/Orders/EloquentOrderRepository.php
 ```
 
-Introduce an interface only when a second implementation exists or is imminent. The interface lives with the caller:
-
-```text
-app/Application/Orders/Contracts/OrderRepository.php
-```
-
-or, rarely, in a domain context's published contracts when domain code truly needs the port.
+Introduce an interface only when a second implementation exists or is imminent; it lives with the caller (`app/Application/Orders/Contracts/OrderRepository.php`), or rarely in a domain context's published contracts. With a single implementation, inject the concrete class directly.
 
 ## Naming
 
 - Concrete class: `<Mechanism><Aggregate>Repository`, e.g. `EloquentOrderRepository`.
 - Interface when justified: `<Aggregate>Repository`.
-- Methods are named by intent: `find`, `save`, `nextPendingReview`, not `whereStatusAndReviewer`.
+- Methods named by intent: `find`, `save`, `findByEmail`, `nextPendingReview` — not `whereStatusAndReviewer`.
+- **Injected property:** the persistence-mechanism prefix may be dropped — `EloquentOrderRepository $orderRepository` (preferred) or `$eloquentOrderRepository` (allowed). See [Conventions § variable names match the class](../conventions.md#naming).
 
 ## Skeleton
 
@@ -101,14 +79,12 @@ final class EloquentOrderRepository
 
 The Application action decides whether this runs inside a transaction.
 
-## Repository vs read model
+## Repository vs reader
 
-Repositories load aggregates for behavior. Read models answer queries for screens/reports and return DTOs.
-
-If the consumer will not mutate the returned data, it is probably a read model, not a repository.
+Repositories load aggregates for behavior and persist them. Readers answer queries for screens/reports/decision-support and return DTOs. If the consumer will not mutate the returned data, it is a reader, not a repository.
 
 ## See also
 
-- [Read models](../application/read-models.md) — query-shaped data.
+- [Read models](../application/read-models.md) — the read-side counterpart and the canonical statement of the data-access rule.
 - [Transactions](../transactions.md) — use-case commit boundaries.
 - [Models](models.md) — aggregate roots and parts.
