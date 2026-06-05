@@ -9,7 +9,7 @@ final class DocsBundler
      */
     private const BUNDLES = [
         'global' => 'build/docs-global-rules.md',
-        'backend' => 'build/docs-backend-data-http.md',
+        'backend' => 'build/docs-backend-application-data-http.md',
         'frontend' => 'build/docs-frontend.md',
     ];
 
@@ -24,13 +24,15 @@ final class DocsBundler
             'global' => array_values(array_filter(
                 $orderedDocs,
                 static fn (string $path): bool => str_starts_with($path, 'docs/')
+                    && ! str_starts_with($path, 'docs/application/')
                     && ! str_starts_with($path, 'docs/data/')
                     && ! str_starts_with($path, 'docs/http/')
                     && ! str_starts_with($path, 'docs/frontend/'),
             )),
             'backend' => array_values(array_filter(
                 $orderedDocs,
-                static fn (string $path): bool => str_starts_with($path, 'docs/data/')
+                static fn (string $path): bool => str_starts_with($path, 'docs/application/')
+                    || str_starts_with($path, 'docs/data/')
                     || str_starts_with($path, 'docs/http/'),
             )),
             'frontend' => array_values(array_filter(
@@ -167,7 +169,7 @@ final class DocsBundler
     {
         return match ($bundleName) {
             'global' => 'Documentation Bundle: Global Rules',
-            'backend' => 'Documentation Bundle: Backend Data + HTTP',
+            'backend' => 'Documentation Bundle: Backend Application + Data + HTTP',
             'frontend' => 'Documentation Bundle: Frontend',
             default => 'Documentation Bundle',
         };

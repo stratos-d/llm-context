@@ -10,13 +10,13 @@
 >
 > **Forbids**
 >
-> - `Gate::authorize(...)` / `$this->authorize(...)` / `Gate::allows(...)` inside an Application action or Domain action
+> - `Gate::authorize(...)` / `$this->authorize(...)` / `Gate::allows(...)` inside an Application action or aggregate method
 > - Policies that talk to HTTP, sessions, or request scope directly
 > - Re-stating Laravel's policy mechanics — those live in the Laravel docs
 >
 > **See also**: [Architecture](architecture.md), [Actions](actions.md), [Request data](http/request-data.md), [Controllers](http/controllers.md), [Anti-patterns](anti-patterns.md)
 
-Authorization decides whether a given **actor** is allowed to perform a given **operation** on a given **resource**. In this project, those decisions are framework-coupled (they read the authenticated user out of the request, they live next to Laravel's `Gate` facade) and therefore live at the **delivery boundary** — request data objects and controllers — not inside Application or Domain actions, which stay framework-agnostic.
+Authorization decides whether a given **actor** is allowed to perform a given **operation** on a given **resource**. In this project, those decisions are framework-coupled (they read the authenticated user out of the request, they live next to Laravel's `Gate` facade) and therefore live at the **delivery boundary** — request data objects and controllers — not inside Application actions or aggregate methods, which stay framework-agnostic.
 
 ## Where Policies live
 
@@ -25,6 +25,8 @@ app/Domains/<ContextName>/Policies/<Aggregate>Policy.php
 ```
 
 A policy is the per-aggregate authorization class Laravel auto-discovers via the model ↔ policy convention: `App\Domains\Employees\Models\Employee` resolves to `App\Domains\Employees\Policies\EmployeePolicy` automatically. No manual registration needed.
+
+Policies are Laravel authorization adapters colocated with the aggregate context. They are not domain behavior. They must not mutate state, open transactions, perform persistence, or call HTTP/session/request helpers.
 
 Rules:
 
@@ -97,7 +99,10 @@ final class DisableEmployeeController
     {
         Gate::authorize('disable', $employee);
 
-        $this->disableEmployeeAction->execute($employee, $data->reason);
+        $this->disableEmployeeAction->execute(
+            employeeId: EmployeeId::fromString((string) $employee->getKey()),
+            reason: $data->reason,
+        );
 
         return redirect()->route('employees.index');
     }
@@ -119,8 +124,11 @@ The rules that aren't about *who you are* but about *whether the operation makes
 ```php
 final class ApproveContentChangeAction
 {
-    public function execute(ContentChange $change, Employee $reviewer): ApproveContentChangeResult
+    public function execute(ContentChangeId $changeId, EmployeeId $reviewerId): ApproveContentChangeResult
     {
+        $change = ContentChange::query()->findOrFail($changeId->toString());
+        $reviewer = Employee::query()->findOrFail($reviewerId->toString());
+
         if (! $reviewer->canReview($change->category)) {
             return ApproveContentChangeResult::outsideReviewerScope();
         }
@@ -152,7 +160,7 @@ If the same policy method should apply across entry points, both controllers cal
 | Forbidden | Why | Right shape |
 | --------- | --- | ----------- |
 | `Gate::authorize(...)` inside an Application action | Couples the action to the framework's auth facade and to the request-scoped current user | Move to the controller; pass any business-rule check into the action as plain code |
-| `Gate::authorize(...)` inside a Domain action | Same | Same |
+| `Gate::authorize(...)` inside an aggregate method | Same framework-coupling problem, plus the aggregate now depends on request scope | Move to the controller; keep aggregate methods focused on state and invariants |
 | `auth()->user()` / `Auth::user()` inside a policy | Policy receives the actor as a parameter; pulling it from request scope is service-locator pattern | Pass the actor through |
 | Policy class outside `Domains/<X>/Policies/` | Breaks Laravel's auto-discovery convention this project relies on | Move to the aggregate's context |
 | Inline authorization in a model (`public function canBeDisabledBy(...)`) | Policies own authorization; models own state | Extract to the policy |

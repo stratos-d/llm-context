@@ -5,22 +5,22 @@
 > - Inertia page-prop shaping rules
 > - When to use Eloquent API resources (single-entity detail)
 > - When to use view models / presenters (multi-source pages)
-> - The boundary with [Read models](read-models.md) (lists, dashboards, reports)
+> - The boundary with [Read models](../application/read-models.md) (lists, dashboards, reports)
 >
 > **Forbids**
 >
 > - Inline anonymous-array shaping in controllers
 > - Page-prop shaping inside `HandleInertiaRequests` for non-trivial actor data
 > - Authorization checks dressed up as view data
-> - Loading aggregates to render lists or dashboards — see [Read models](read-models.md)
+> - Loading aggregates to render lists or dashboards — see [Read models](../application/read-models.md)
 >
-> **See also**: [Controllers](controllers.md), [Read models](read-models.md), [Models](../data/models.md), [Architecture](../architecture.md)
+> **See also**: [Controllers](controllers.md), [Read models](../application/read-models.md), [Models](../data/models.md), [Architecture](../architecture.md)
 
 When a controller renders an Inertia page with non-trivial data, the page-props array is **shaped by a dedicated class** — never inline. There are three shaping options, picked by data source:
 
 - One entity's details → an [Eloquent API resource](#the-two-shaping-options).
 - A page composed from multiple sources → a [view model](#the-two-shaping-options).
-- A list / table / dashboard / report → a [read model](read-models.md).
+- A list / table / dashboard / report → a [read model](../application/read-models.md).
 
 > Names like `Employee` / `EmployeeResource` / `DashboardViewModel` are illustrative.
 
@@ -30,7 +30,7 @@ Pick the one that fits the data source:
 
 1. **Eloquent API resource** (`<Model>Resource extends JsonResource`)
    - For **one entity's details** — a single model, with optional eager-loaded relations, projected to a thin response shape.
-   - **Not** for lists, tables, dashboards, or anything paginated. Those go through a [read model](read-models.md).
+   - **Not** for lists, tables, dashboards, or anything paginated. Those go through a [read model](../application/read-models.md).
    - Lives next to the other HTTP code for its entry point at `Interfaces/<EntryPoint>/Resources/<Model>Resource.php`.
 
 2. **View model / presenter** (`<Page>ViewModel`)
@@ -39,9 +39,9 @@ Pick the one that fits the data source:
    - Lives at `Interfaces/<EntryPoint>/ViewModels/<Page>ViewModel.php`.
    - May internally compose resources and read-model results.
 
-For the third case — list / table / dashboard / report screens — use a [read model](read-models.md). Read models hit the database directly with tuned queries and return DTOs; they do not load aggregates. This keeps list pages from hydrating models they don't need.
+For the third case — list / table / dashboard / report screens — use a [read model](../application/read-models.md). Read models hit the database directly with tuned queries and return DTOs; they do not load aggregates. This keeps list pages from hydrating models they don't need.
 
-> Resources, view models, and read models are part of the **delivery layer**, not the domain. The same `Employee` model can have a different `EmployeeResource` for `AdminWeb` (verbose) and `PartnerApi` (terse). They share the model — they do not share the response shape.
+> Resources and view models are part of the **delivery layer**. Read models are Application-layer query results consumed by delivery. The same `Employee` model can have a different `EmployeeResource` for `AdminWeb` (verbose) and `PartnerApi` (terse). They share the model — they do not share the response shape.
 
 ## Why not inline
 
@@ -129,7 +129,7 @@ Compose resources inside view models — do not duplicate the resource's shape.
 
 ## See also
 
-- [Read models](read-models.md) — the right home for list / table / dashboard / report data.
+- [Read models](../application/read-models.md) — the right home for list / table / dashboard / report data.
 - [Controllers](controllers.md) — where resources / view models / read-model results are constructed.
 - [Models](../data/models.md) — the source of read-only state helpers resources rely on.
 - [Architecture § layer responsibilities](../architecture.md#layer-responsibilities) — view-data shaping is the read-side counterpart of action invocation.

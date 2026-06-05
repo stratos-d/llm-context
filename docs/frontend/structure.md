@@ -1,4 +1,4 @@
-07# Frontend structure
+# Frontend structure
 
 > **Owns**
 >

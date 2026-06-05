@@ -186,7 +186,7 @@ If the per-entry-point provider has no bindings to register, **don't create it**
 
 Most things. Don't wrap framework calls in a service "for testability" or "in case it changes":
 
-- **Eloquent / query builder / `DB::transaction()`.** The database is the project's primary persistence. Eloquent is part of the domain layer (see [Philosophy](philosophy.md)).
+- **Eloquent / query builder / `DB::transaction()`.** The database is the project's primary persistence. Eloquent models are acceptable aggregate roots, and Application queries may use the query builder directly for tuned read models (see [Philosophy](philosophy.md)).
 - **HTTP request and response shaping.** Controllers shape HTTP. Inertia renders. No abstraction needed.
 - **Validation.** Owned by request data objects.
 - **Logging.** `Log::*` is fine. Logging mechanism changes are rare and self-contained.

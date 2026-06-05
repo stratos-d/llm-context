@@ -23,6 +23,8 @@ All write-endpoint validation goes through a request data object. Inline `$reque
 
 Request data objects live at `Interfaces/<EntryPoint>/Requests/<Group>/<Name>Data.php` — alongside the controllers that consume them. They never live inside `Domains/`. Validation rules are part of the **delivery layer**: the same domain action may be called by `AdminWeb` (with browser-friendly rules) and `PartnerApi` (with stricter API rules), and each entry point owns its own request data object. They share an action, not a request contract.
 
+Request data validates and shapes HTTP input. Controllers translate request data into scalars, value objects, identity value objects, or Application input DTOs. Application actions never depend on entry-point-specific request data classes.
+
 ## Skeleton
 
 ```php
@@ -50,6 +52,7 @@ final class <Verb><Noun>Data extends Data
 - **Helper methods are optional, not mandatory.** Add methods like `credentials(): EmployeeCredentials` only when they improve the call site or package multiple values into a stronger domain input.
 - **Inject `Request` alongside the data object when you need raw HTTP concerns.** Session access, file uploads, headers, IP address, and the authenticated actor still come from `Illuminate\Http\Request`; the request data object owns validated body/query inputs.
 - **No persistence, no action calls.** The data object only validates and shapes. Any write is the action's job.
+- **Do not pass request data objects into Application actions.** Map their validated properties to scalar/value-object parameters or to an Application input DTO living next to the action.
 - **`final` class.** Same as the rest of the project — see [Conventions § class modifiers](../conventions.md#class-modifiers).
 
 ## `authorize()` vs policies
@@ -73,7 +76,10 @@ public function __invoke(Employee $employee, DisableEmployeeData $data): Redirec
 {
     Gate::authorize('disable', $employee);
 
-    $this->disableEmployeeAction->execute($employee, $data->reason);
+    $this->disableEmployeeAction->execute(
+        employeeId: EmployeeId::fromString((string) $employee->getKey()),
+        reason: $data->reason,
+    );
 
     return redirect()->route('employees.index');
 }

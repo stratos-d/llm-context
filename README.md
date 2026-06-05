@@ -19,7 +19,7 @@ composer docs:bundle
 The command writes:
 
 - `build/docs-global-rules.md`
-- `build/docs-backend-data-http.md`
+- `build/docs-backend-application-data-http.md`
 - `build/docs-frontend.md`
 
 `build/` is ignored because bundles are generated artifacts.
@@ -69,3 +69,4 @@ Tool-specific runtime files do not belong at the repo root:
 - `.claude/`
 - `.windsurf/`
 - `.mcp.json`
+- `.idea/`

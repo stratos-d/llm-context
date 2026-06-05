@@ -2,161 +2,98 @@
 
 > **Owns**
 >
-> - The transaction-root rule: only **Application actions** open `DB::transaction()`
-> - The "no transaction wrap for single-row writes" rule
-> - The nesting policy (forbidden in this project)
-> - What runs inside vs outside the commit boundary
-> - Cross-context call behaviour relative to transactions
+> - Transaction-root rule
+> - When to wrap writes
+> - What runs inside or after a transaction
+> - Repository relationship to transaction boundaries
 >
 > **Forbids**
 >
-> - `DB::transaction()` inside Domain actions, controllers, services, listeners, jobs, models
-> - Re-stating action / model / event rules — those live in their own files
+> - Transactions in controllers, models, aggregate methods, listeners, services, or jobs
+> - Nested use-case transactions
 >
-> **See also**: [Actions](actions.md), [Architecture](architecture.md), [Cross-context communication](cross-context.md), [Domain events](domain-events.md), [Anti-patterns](anti-patterns.md)
+> **See also**: [Actions](actions.md), [Models](data/models.md), [Domain events](domain-events.md), [Repositories](data/repositories.md)
 
-A database transaction is a **commit boundary**: a set of writes that succeed or fail together. The project pins one place where that boundary is opened, so a reader can answer "is this atomic?" by looking at exactly one file: the Application action that owns the use case.
+A transaction is a commit boundary. The project pins that boundary to one place: the Application action that owns the use case.
 
-## The rule
+## Rule
 
-**Only Application actions open `DB::transaction()`.** Domain actions, controllers, concrete services, listeners, jobs, middleware, and models never open one.
+Only **Application actions** open use-case transactions.
 
-The Application action is the **transaction root**: the single point where the use case's commit boundary is decided. Everything it composes — Domain actions, services, event dispatches — runs inside that boundary.
+Aggregates, controllers, jobs, listeners, policies, request data, concrete services, and repositories do not decide use-case transaction boundaries.
 
 ```php
-// Application/EmployeeAuth/SomeUseCaseAction.php
-final class SomeUseCaseAction
+final readonly class GrantOrganizationAccessAction
 {
-    public function __construct(
-        private SomeDomainAction $someDomainAction,
-        private OtherDomainAction $otherDomainAction,
-    ) {}
+    public function __construct(private DatabaseManager $db) {}
 
-    public function execute(/* … */): Result
+    public function execute(GrantAccessInput $input): void
     {
-        return DB::transaction(function () {
-            $this->someDomainAction->execute(/* … */);
-            $this->otherDomainAction->execute(/* … */);
+        $events = $this->db->transaction(function () use ($input): array {
+            $access = EmployeeOrganizationAccess::grant(
+                employeeId: $input->employeeId,
+                organizationId: $input->organizationId,
+                role: $input->role,
+            );
 
-            return Result::ok();
+            $access->saveOrFail();
+
+            return $access->releaseDomainEvents();
         });
+
+        foreach ($events as $event) {
+            event($event);
+        }
     }
 }
 ```
 
-## When *not* to wrap
+## When to wrap
 
-A single-row write is already atomic at the database level. Wrapping `$model->save()` in `DB::transaction()` adds zero safety and one layer of noise. Don't.
+Open a transaction when the use case writes more than one row, aggregate, or table that must commit together.
+
+Do not wrap a single `saveOrFail()` when the single row write is already atomic and there is no related side effect that must be coordinated.
+
+## Aggregates do not wrap
+
+Aggregate methods mutate in-memory state and throw domain exceptions. They do not know whether their caller needs a transaction.
 
 ```php
-// ❌ pointless
-DB::transaction(function () use ($employee): void {
-    $employee->last_login_at = $clock->now();
-    $employee->save();
-});
-
-// ✅ same guarantee, less ceremony
-$employee->last_login_at = $clock->now();
-$employee->save();
+$order->cancel($employeeId);    // no DB transaction here
+$order->saveOrFail();           // Application persists
 ```
 
-Open a transaction only when the use case writes:
+## Repositories do not own use-case transactions
 
-- More than one row across one or more tables that must commit together.
-- One row across multiple statements (e.g. `update` + `delete` in the same logical step).
-- A write *plus* a side effect that must roll back if the write fails (event whose listener also writes; outbox row; etc.).
+Repositories may hide aggregate persistence details, especially when saving a root plus children. They should not generally open the use-case transaction.
 
-If the use case is "load an aggregate, change one field, save it", no wrap.
+Preferred flow:
 
-## Domain actions never wrap
+```text
+Application action opens transaction
+Application action loads aggregate
+Application action calls aggregate behavior
+Repository/action persists aggregate
+Transaction commits
+Application action dispatches events after commit
+```
 
-A Domain action protects an aggregate invariant. Whether its caller wants the work in a transaction is the **caller's** decision, not the Domain action's. A Domain action that opens its own transaction:
-
-- Pretends to be a use case (it isn't — that's the Application action's job).
-- Hides the commit boundary from the use-case file the reviewer is reading.
-- Surprises the next caller, who wraps the call in their own transaction and now has nested-savepoint semantics they didn't ask for.
-
-If a Domain action mutates multiple rows that must commit together, that is **fine** — it just trusts that whoever called it opened the transaction. If the only callers today are an Application action that wraps and a controller that doesn't, the controller is wrong: it should be calling an Application action that wraps, not the Domain action directly.
-
-## Controllers, services, listeners, jobs never wrap
-
-| Layer | What it does about transactions |
-| ----- | ------------------------------- |
-| Controller | Calls one Application action; never opens a transaction itself |
-| Concrete service in `Infrastructure/` | Performs one composite framework operation; never opens a transaction (a service that also commits is a hidden action — split it) |
-| Listener (synchronous) | Runs inside the emitter's transaction by default in Laravel; do not open a nested one |
-| Job (queued) | The job is its own request lifecycle — its `handle()` method is treated like a controller and calls one Application action |
-| Middleware | Never |
-| Model | Never |
+Repository-level transactions are only acceptable for narrow persistence internals that are not the use-case boundary. If a repository method name sounds like a business use case, it probably belongs in an Application action.
 
 ## No nested transactions
 
-Laravel's `DB::transaction()` supports nesting via savepoints. **The project does not.** The rule is one transaction per use case, opened at the Application action.
+One use case has one transaction root. If an Application action needs another operation inside the same transaction, extract the shared behavior to an aggregate method, domain service, repository persistence method, or private Application helper that does not open its own transaction.
 
-If you find yourself wanting a nested wrap, the cause is one of:
+## Events and jobs
 
-- A Domain action opening its own transaction. Remove that wrap; it belongs at the Application layer.
-- An Application action calling another Application action that also wraps. That's a use-case-from-a-use-case shape; the inner action should be a Domain action, or the work should be inlined, or the outer action should not wrap.
-- A listener trying to "be safe" with its own transaction. It's already inside one synchronously; nested savepoints add complexity, not safety.
+- Domain events recorded by aggregates are dispatched after the aggregate has been persisted and the transaction has committed by default.
+- Synchronous domain-event dispatch inside the transaction is only for listeners that intentionally participate in the same commit boundary.
+- Jobs should be dispatched after commit when they depend on committed data.
 
-## Cross-context calls and transactions
-
-A cross-context call (see [Cross-context communication](cross-context.md)) does **not** introduce a new commit boundary by itself. The behaviour depends on the mechanism:
-
-| Mechanism | Inside the same transaction? |
-| --------- | --------------------------- |
-| Synchronous domain event (Laravel default) | Yes. The listener's writes commit / roll back with the emitter. |
-| Published action call from one Application action to another | The inner published action's writes are inside the outer's transaction (Laravel does not auto-rewrap). The outer is the root; the inner does not open its own. |
-| Future queued event / outbox / cross-process call | No — but those aren't built yet. See [Cross-context communication § reliable delivery](cross-context.md#reliable-delivery--current-honesty). |
-
-A consequence: today, a synchronous listener that throws will roll back the *emitter's* writes. That is a feature, not a bug, but it means listeners must be **safe to fail** — failure is not isolated.
-
-## What runs inside the transaction
-
-Inside the `DB::transaction()` callback:
-
-- All persistence calls related to the use case (`$model->save()`, `$model->delete()`, builder bulk updates).
-- Domain action calls.
-- `event(...)` calls — synchronous listeners run inside the same transaction by default.
-
-What does **not** run inside the transaction:
-
-- HTTP responses. Controllers compose actions and then return; the transaction has already closed.
-- External I/O that the use case must not roll back (sending a webhook, calling a third-party API). Once the network call has happened, no rollback can undo it. If a use case needs to perform external I/O *and* persist a record of it, that is the [outbox pattern](cross-context.md#reliable-delivery--current-honesty)'s job — not implemented yet.
-- Validation. Request data is validated before the controller calls the action; failure short-circuits before any DB work.
-
-## Common shapes
-
-### Use case writes one row only
-
-No transaction wrap. The Application action calls a Domain action (or modifies and saves the aggregate inline); the single `save()` is atomic.
-
-### Use case writes across multiple aggregates
-
-`DB::transaction()` at the top of the Application action. Each Domain action mutates one aggregate; all of them commit together.
-
-### Use case writes one aggregate and emits a domain event
-
-Wrap **if** any synchronous listener writes data that must roll back together with the use case (the common case). No wrap if all listeners are pure side effects to non-database systems — but those are usually outbox candidates anyway.
-
-### Use case calls a published action in another context
-
-The outer Application action wraps. The inner published action does not (it is itself an Application action, but composed). Both contexts' writes commit together.
-
-## Consequences for the existing code
-
-Following from the rule above:
-
-- `RecordEmployeeLoginAction` (Domain action, single-row write) — no wrap. ✅ already correct.
-- `DisableEmployeeTwoFactorAction` (Domain action, single-row multi-column write) — no wrap. ✅ corrected.
-- `EnableEmployeeTwoFactorAction` (Domain action, single-row multi-column write) — no wrap. ✅ corrected.
-- `ConfirmEmployeeTwoFactorAction`, `ConsumeEmployeeRecoveryCodeAction`, `RegenerateEmployeeTwoFactorRecoveryCodesAction` (Domain actions, single-row writes) — no wrap. ✅ already correct.
-
-When an Application action is added that composes more than one Domain action *and* the composition must commit together, that Application action will be the first place `DB::transaction()` appears in the codebase. Until then, the absence of any `DB::transaction(...)` call is a feature, not an oversight.
+See [Domain events](domain-events.md) and [Jobs](jobs.md).
 
 ## See also
 
-- [Actions § signature rules](actions.md#signature-rules) — short-form transaction guidance; this file is the long form.
-- [Architecture § layer responsibilities](architecture.md#layer-responsibilities) — confirms Application action is the orchestration layer.
-- [Cross-context communication § reliable delivery](cross-context.md#reliable-delivery--current-honesty) — what's *not* covered by the current transactional model.
-- [Anti-patterns § framework-coupling and infrastructure leaks](anti-patterns.md#framework-coupling-and-infrastructure-leaks) — grep-friendly signals of misplaced transactions.
+- [Actions](actions.md) — Application action shape.
+- [Models](data/models.md) — aggregate behavior and persistence boundary.
+- [Repositories](data/repositories.md) — when repositories are justified.

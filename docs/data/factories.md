@@ -10,7 +10,7 @@
 >
 > **Forbids**
 >
-> - Business rules and invariants — see [Actions](../actions.md)
+> - Business rules and invariants — see [Models](models.md) and [Actions](../actions.md)
 > - Cross-aggregate orchestration — use sequences / `has()` / `for()` at the call site
 > - Database seeding — that is a separate concern (seeders *use* factories)
 >
@@ -113,7 +113,7 @@ The verb forms describe writes — those are actions, not factory states. See [A
 
 ## What does not belong in a factory
 
-- Business rules or invariants — those live in actions ([Actions](../actions.md)).
+- Business rules or invariants — aggregate invariants live on models, and write orchestration lives in Application actions ([Models](models.md), [Actions](../actions.md)).
 - Relationships that imply orchestration across aggregates — use Eloquent's call-site composition (`Sequence`, `has()`, `for()`) instead of building a "create everything" factory state.
 - Database seeding of fixtures — that belongs in seeders, which *use* factories.
 

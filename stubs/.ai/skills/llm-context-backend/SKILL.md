@@ -15,7 +15,7 @@ Use this skill before making backend structural changes. Read only the files tha
 ## Topic Map
 
 - `docs/llm-context/adding-a-context.md` — adding a new bounded context end-to-end.
-- `docs/llm-context/actions.md` — domain actions vs application actions, placement rules, result objects, and write orchestration.
+- `docs/llm-context/actions.md` — Application actions, aggregate behavior placement, result objects, and write orchestration.
 - `docs/llm-context/transactions.md` — transaction ownership, when to wrap work, and the no-nested-transaction rule.
 - `docs/llm-context/authorization.md` — policy placement and where authorization checks belong.
 - `docs/llm-context/exceptions.md` — domain exception hierarchy, throw/catch policy, and delivery-layer mapping.
@@ -30,7 +30,7 @@ Use this skill before making backend structural changes. Read only the files tha
 ## Data Layer
 
 - `docs/llm-context/data/models.md` — base models, aggregate roots/parts, casts, relationships, and model boundaries.
-- `docs/llm-context/data/value-objects.md` — when to introduce value objects and how to wire casts.
+- `docs/llm-context/data/value-objects.md` — internal value objects, published identity contracts, and casts.
 - `docs/llm-context/data/builders.md` — custom Eloquent builders and reusable read filters.
 - `docs/llm-context/data/repositories.md` — repository trigger rules and port/adapter layout.
 - `docs/llm-context/data/factories.md` — factory location, auto-resolution, and named states.
@@ -41,4 +41,4 @@ Use this skill before making backend structural changes. Read only the files tha
 - `docs/llm-context/http/controllers.md` — controller placement, shape, and what must not live in controllers.
 - `docs/llm-context/http/request-data.md` — request-backed input data and validation boundaries.
 - `docs/llm-context/http/view-data.md` — Inertia/page-prop shaping for delivery responses.
-- `docs/llm-context/http/read-models.md` — list/table/dashboard/report queries and CQRS-lite read models.
+- `docs/llm-context/application/read-models.md` — list/table/dashboard/report queries and CQRS-lite read models.

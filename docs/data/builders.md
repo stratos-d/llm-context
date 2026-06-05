@@ -15,7 +15,7 @@
 >
 > **See also**: [Models](models.md), [Factories](factories.md), [Architecture](../architecture.md), [Actions](../actions.md)
 
-A builder is the read-side surface for a model. Reusable filters, ordering, and eager-load presets live here so that controllers and actions never accumulate `->where(...)` chains.
+A builder is the reusable read-filter surface for a model. Common filters, ordering, and eager-load presets live here so controllers, actions, and Application queries do not duplicate the same `->where(...)` chains.
 
 > Names like `Employee` / `EmployeeBuilder` in code samples are illustrative — apply the pattern, not the literal naming.
 
@@ -129,7 +129,7 @@ publish<...>()
 reserve<...>()
 ```
 
-Those belong in actions (see [Actions](../actions.md)), not in a builder.
+Those belong in an Application action and, when the change protects meaningful behavior, on the aggregate root itself. See [Actions](../actions.md) and [Models](models.md).
 
 ## What does not belong in a builder
 
@@ -153,7 +153,7 @@ $record = Employee::query()
     ->first();
 ```
 
-If a controller or action ever needs `->where('column', $value)` directly, that is a missing builder method. Add it.
+If the same `->where('column', $value)` condition appears in more than one controller, action, or Application query, that is a missing builder method. Add it. One-off query shaping inside an Application query is acceptable when it is local to that read model.
 
 ## See also
 

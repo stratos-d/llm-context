@@ -231,7 +231,7 @@ final class EnableEmployeeTwoFactorAction
         private TwoFactorAuthenticator $twoFactorAuthenticator,
     ) {}
 
-    public function execute(Employee $employee): void { /* … */ }
+    public function execute(EmployeeId $employeeId): void { /* … */ }
 }
 ```
 
@@ -266,7 +266,9 @@ public function test_recording_a_login_stamps_the_employee(): void
     CarbonImmutable::setTestNow($now);
 
     $employee = Employee::factory()->create();
-    $this->recordEmployeeLoginAction->execute($employee);
+    $this->recordEmployeeLoginAction->execute(
+        EmployeeId::fromString((string) $employee->getKey()),
+    );
 
     $this->assertTrue($employee->refresh()->last_login_at->equalTo($now));
 }
@@ -276,33 +278,30 @@ public function test_recording_a_login_stamps_the_employee(): void
 
 ## IDs
 
-Aggregate roots use **UUIDv7** as the primary key. Internal-only tables that have no domain identity (pivots, queue tables, audit logs not externally addressable, lookup tables) keep `bigint` autoincrement.
+Aggregate roots must have **stable identities**. The concrete ID format is a project-level technical decision, not a DDD rule.
 
 ### Rule
 
-| Table category | Primary key |
-| -------------- | ----------- |
-| Aggregate root (`Employee`, future `Client`, `Account`, `Document`, `ActivityEvent`) | UUIDv7 |
-| Pivot table (`role_user`, `model_has_permissions`) | composite `bigint`s as the framework wants |
-| Framework-managed table (`jobs`, `failed_jobs`, `sessions`, `cache`, `password_reset_tokens`) | `bigint` autoincrement (framework default) |
-| Lookup / enum-like table (`countries`, `currencies`) | natural key (`code`) when one exists, else `bigint` |
-| Audit / log table not externally addressable | `bigint` autoincrement |
+Allowed stable formats include `int`, `uuid`, `uuidv7`, `ulid`, prefixed strings, or another format the project explicitly chooses.
 
-**Tie-breaker when in doubt: pick UUIDv7.** Promoting an internal `bigint` to a UUID later is a bigger migration than paying 8 extra bytes per row up front.
+Rules:
 
-### Why UUIDv7 over ULID
+- **Aggregate roots have stable IDs.** They can be referenced across requests, events, jobs, logs, and bounded-context boundaries.
+- **The format is not global by default.** Do not assume every aggregate ID uses the same database type unless the project has explicitly decided that.
+- **Identity value objects mirror the owning context's decision.** `EmployeeId`, `UserId`, and `OrganizationId` should not validate one global format unless the owning context actually requires that format.
+- **Internal-only tables follow their technical needs.** Pivots, framework tables, lookup tables, queue tables, and audit/log tables may use composite keys, natural keys, autoincrement IDs, or another stable shape.
+- **Cross-context contracts depend on identity semantics, not storage type.** Other contexts should not need to know whether an ID is stored as `bigint`, `uuid`, `char(26)`, or something else.
 
-- **Postgres native `uuid` type.** Stored as 16 bytes, indexed efficiently. ULID has no native type — stored as `char(26)` or `bytea`.
-- **Laravel-native support.** `Illuminate\Database\Eloquent\Concerns\HasUuids` plus `Str::uuid7()` ship out of the box.
-- **Time-ordered.** UUIDv7's leading 48 bits are a Unix-millisecond timestamp, so b-tree index locality stays close to autoincrement performance.
+### Optional ID Format Decision
 
-### Why UUIDv7 over autoincrement on aggregate roots
+Choosing `int`, `uuid`, `uuidv7`, or `ulid` is an implementation tradeoff:
 
-- **No enumeration.** Sequential IDs in URLs leak count and growth rate; for most applications this is an information-disclosure and IDOR risk.
-- **Pre-generation.** UUIDv7 can be minted client-side or before insert, which idempotency tokens and event payloads rely on.
-- **Cross-system stability.** When events fire to other contexts (or one day to a separate service), the ID is unambiguous without revealing the originating shard or sequence.
+- `int` / autoincrement is compact and framework-friendly, but exposes sequence information if used externally.
+- `uuid` / `uuidv7` is globally unique and widely supported; UUIDv7 adds insertion-order locality where supported.
+- `ulid` is sortable and human-copyable, but is usually stored as text unless the project adds custom storage.
+- Prefixed strings can improve operational clarity, but require a deliberate convention.
 
-Full migration mechanics (the `HasUuids` trait, `newUniqueId()` override, factory wiring) live in [Models § IDs](data/models.md#ids).
+This project documentation does not choose one. Decide per project, document the decision, then keep ID value objects and migrations consistent with it.
 
 ## Logging
 
@@ -328,7 +327,7 @@ Full migration mechanics (the `HasUuids` trait, `newUniqueId()` override, factor
 | `info(...)` helper | Forbidden. Same reason. |
 | `Log::channel('...')->info(...)` | Forbidden on the default channel. A **dedicated audit channel** may use `info`, but the call sites must go through a wrapper named for the intent (e.g. `AuditLog::record(...)`), not through `Log::channel(...)->info(...)` directly. |
 | `Log::info()` to announce a request or job started / finished | Use framework logging channels for request / queue lifecycle; don't re-implement them. |
-| `Log::*` inside a Domain action | Domain actions stay framework-agnostic. Log at the composition root (Application action, controller, listener) — or emit an event and let a listener log. |
+| `Log::*` inside an aggregate method | Aggregates stay framework-agnostic. Log at the composition root (Application action, controller, listener) — or record an event and let a listener log after dispatch. |
 | `Log::*($message, ['user' => auth()->user()->toArray()])` | PII in unstructured logs is forbidden. See future PII plan; for now, log stable identifiers (aggregate IDs) only. |
 
 ### Allowed
@@ -354,6 +353,6 @@ String-interpolated identifiers (`"Login rejected for {$employee->id}"`) make lo
 ## See also
 
 - [Architecture](architecture.md) — the folder layout and layer responsibilities these rules sit on top of.
-- [Models § IDs](data/models.md#ids) — the migration / model mechanics for UUIDv7 PKs.
+- [Value objects § identifier value objects](data/value-objects.md#identifier-value-objects) — identity contracts and format-aware validation.
 - [Anti-patterns](anti-patterns.md) — grep-friendly red flags for time and ID violations.
 - [README](README.md) — the topic index.
