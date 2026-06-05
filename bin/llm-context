@@ -1,0 +1,109 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+final class LlmContextInstaller
+{
+    private const TARGET_DOCS_PATH = 'docs/llm-context';
+
+    private const TARGET_STUB_PATHS = [
+        '.ai/guidelines/llm-context/00-entrypoint.md',
+        '.ai/skills/llm-context-backend/SKILL.md',
+        '.ai/skills/llm-context-frontend/SKILL.md',
+    ];
+
+    public function install(string $sourceRoot, string $targetRoot): void
+    {
+        $sourceRoot = $this->realPath($sourceRoot);
+        $targetRoot = $this->realPath($targetRoot);
+
+        if ($sourceRoot === $targetRoot) {
+            throw new RuntimeException('Run this command from the target project root, not from the llm-context repository root.');
+        }
+
+        $sourceDocsPath = $sourceRoot . DIRECTORY_SEPARATOR . 'docs';
+        $sourceStubsPath = $sourceRoot . DIRECTORY_SEPARATOR . 'stubs';
+        $targetDocsPath = $targetRoot . DIRECTORY_SEPARATOR . self::TARGET_DOCS_PATH;
+
+        if (! is_dir($sourceDocsPath)) {
+            throw new RuntimeException(sprintf('Source docs directory was not found at [%s].', $sourceDocsPath));
+        }
+
+        if (! is_dir($sourceStubsPath)) {
+            throw new RuntimeException(sprintf('Source stubs directory was not found at [%s].', $sourceStubsPath));
+        }
+
+        $copiedFiles = $this->copyDirectory($sourceDocsPath, $targetDocsPath);
+        $copiedStubs = $this->copyDirectory($sourceStubsPath, $targetRoot);
+
+        fwrite(STDOUT, "Installed LLM context.\n");
+        fwrite(STDOUT, sprintf("- Copied %d docs to %s\n", $copiedFiles, self::TARGET_DOCS_PATH));
+        fwrite(STDOUT, sprintf("- Copied %d stubs\n", $copiedStubs));
+
+        foreach (self::TARGET_STUB_PATHS as $targetStubPath) {
+            fwrite(STDOUT, sprintf("- Wrote %s\n", $targetStubPath));
+        }
+
+        fwrite(STDOUT, "\nIf this project uses Laravel Boost, run:\n");
+        fwrite(STDOUT, "php artisan boost:install\n");
+        fwrite(STDOUT, "php artisan boost:update\n");
+    }
+
+    private function realPath(string $path): string
+    {
+        $realPath = realpath($path);
+
+        if ($realPath === false) {
+            throw new RuntimeException(sprintf('Path does not exist: [%s].', $path));
+        }
+
+        return rtrim($realPath, DIRECTORY_SEPARATOR);
+    }
+
+    private function copyDirectory(string $sourceDirectory, string $targetDirectory): int
+    {
+        $copiedFiles = 0;
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($sourceDirectory, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+
+        /** @var SplFileInfo $file */
+        foreach ($iterator as $file) {
+            $relativePath = substr($file->getPathname(), strlen($sourceDirectory) + 1);
+            $targetPath = $targetDirectory . DIRECTORY_SEPARATOR . $relativePath;
+
+            if ($file->isDir()) {
+                $this->ensureDirectory($targetPath);
+
+                continue;
+            }
+
+            $this->ensureDirectory(dirname($targetPath));
+
+            if (! copy($file->getPathname(), $targetPath)) {
+                throw new RuntimeException(sprintf('Unable to copy [%s] to [%s].', $file->getPathname(), $targetPath));
+            }
+
+            $copiedFiles++;
+        }
+
+        return $copiedFiles;
+    }
+
+    private function ensureDirectory(string $path): void
+    {
+        if (! is_dir($path) && ! mkdir($path, 0777, true) && ! is_dir($path)) {
+            throw new RuntimeException(sprintf('Unable to create directory [%s].', $path));
+        }
+    }
+}
+
+try {
+    new LlmContextInstaller()->install(dirname(__DIR__), getcwd());
+} catch (Throwable $throwable) {
+    fwrite(STDERR, $throwable->getMessage() . "\n");
+
+    exit(1);
+}

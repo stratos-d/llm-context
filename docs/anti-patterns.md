@@ -156,7 +156,7 @@ If a code review surfaces any of the signals below, the change needs to move bef
 | `// single-line comment` in a `.php` file | Forbidden. Rename / extract a method / move the explanation to a PHPDoc block on the enclosing declaration. See [Conventions § Comments](conventions.md#comments). |
 | `/* block comment */` (non-doc) | Forbidden. Use a `/** … */` docblock on the enclosing declaration. |
 | `# hash comment` | Forbidden. Same rule as `//`. |
-| `// TODO:` / `// FIXME:` / `// HACK:` | Forbidden. Put tasks in the tracker or in `agent-plans/`, not in a comment. |
+| `// TODO:` / `// FIXME:` / `// HACK:` | Forbidden. Put tasks in the tracker or in an explicit planning document, not in a comment. |
 | Commented-out code | Forbidden. Delete it; version control remembers. |
 
 ### PHPDoc signal density

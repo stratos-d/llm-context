@@ -53,10 +53,6 @@ If you are a human contributor or an AI agent arriving cold, start with the **Re
 - [Anti-patterns](anti-patterns.md) — grep-friendly red-flag tables for layer leaks, framework-coupling, preemptive abstraction, action / result shape, routing, cross-context leaks. Plus a worked refactor example.
 - [Testing](testing.md) — test discipline, commands, substituting collaborators in tests, PR / merge checklist.
 
-### Operations
-
-- [Infrastructure](infrastructure.md) — Docker, dev-infrastructure, Makefile orientation.
-
 ### Reference
 
 - [Glossary](glossary.md) — flat A–Z definitions for every DDD-flavoured term used across the docs, with links to the file that owns each rule.
@@ -92,12 +88,11 @@ For a contributor unfamiliar with the project's conventions, read in this order.
 25. [Anti-patterns](anti-patterns.md)
 26. [Testing](testing.md)
 
-`infrastructure.md` is orthogonal to the rest — read it when you need to interact with the dev environment, not as part of this progression. [Glossary](glossary.md) is a reference, not a reading-order entry; consult it when a term is unfamiliar.
+[Glossary](glossary.md) is a reference, not a reading-order entry; consult it when a term is unfamiliar.
 
 ## For agents
 
-- The high-signal entry point for the project is `AGENTS.md` at the repo root. It links here, plus directly to the highest-traffic topic files for cold starts.
-- In-flight feature plans live under [`agent-plans/`](../agent-plans/). Each plan is dated and self-contained; the most recent plan is the currently-active one.
+- This file is the high-signal entry point for the project's reusable guidance. Tool-specific agent files such as `AGENTS.md` are intentionally not committed here.
 - When making code changes, the layer rules in [Architecture § layer responsibilities](architecture.md#layer-responsibilities) and the signals in [Anti-patterns § red flags](anti-patterns.md#red-flags) are the two tables to keep in mind.
 
 ## Single-source-of-truth invariant

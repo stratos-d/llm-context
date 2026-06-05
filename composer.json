@@ -3,6 +3,12 @@
     "description": "Personal LLM guidelines for Laravel modular monolith applications.",
     "type": "library",
     "license": "MIT",
+    "require": {
+        "php": ">=8.1"
+    },
+    "bin": [
+        "bin/llm-context"
+    ],
     "scripts": {
         "docs:bundle": "@php bin/bundle-docs.php"
     }

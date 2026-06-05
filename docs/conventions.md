@@ -140,7 +140,7 @@ The only comment form allowed in production PHP is the **PHPDoc block** (`/** �
 | `// single-line comment` | Forbidden. If the code needs explanation, either (a) rename so the intent is in the code, (b) extract the block into a well-named private method, or (c) write it as a PHPDoc block on a declaration that owns the concern. |
 | `/* block comment */` (non-doc) | Forbidden. Use a `/** … */` docblock on the enclosing declaration. |
 | `# hash comment` | Forbidden. Same rule as `//`. |
-| `// TODO:` / `// FIXME:` / `// HACK:` | Forbidden. Open a task in the tracker (or a `progress.txt` / `agent-plans/` entry), not a comment the compiler ignores. |
+| `// TODO:` / `// FIXME:` / `// HACK:` | Forbidden. Open a task in the tracker or in an explicit planning document, not a comment the compiler ignores. |
 | Commented-out code | Forbidden. Delete it — version control remembers. |
 
 Exceptions — these are comments but do not count as "comments" for this rule:
