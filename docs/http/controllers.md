@@ -100,18 +100,13 @@ final class NounController
     ) {}
 
     public function show(Noun $noun): Response { /* render */ }
-    public function update(Request $request, UpdateNounData $data, Noun $noun): RedirectResponse
+    public function update(UpdateNounData $data, Noun $noun): RedirectResponse
     {
         Gate::authorize('update', $noun);
 
-        $input = new UpdateNounInput(
-            name: $data->name,
-            status: $data->status,
-        );
-
         $this->updateNounAction->execute(
             nounId: NounId::fromString((string) $noun->getKey()),
-            input: $input,
+            input: $data->toInput(),
         );
 
         return back();
@@ -131,13 +126,13 @@ final class NounController
 
 Each write method still calls **one** action. Each read method calls **one** query/read model when a tuned read shape is needed. Multi-action methods are a refactor target.
 
-`UpdateNounInput` is an Application DTO, not a request data object:
+`UpdateNounInput` is an Application DTO, not a request data object. The request object maps itself to it via `toInput()`; the controller does not hand-assemble it. It is co-located with the action:
 
 ```text
 app/Application/<ContextOrUseCase>/UpdateNounInput.php
 ```
 
-For simple use cases, skip the Application input DTO and pass scalar/value-object parameters directly.
+For trivial one- or two-scalar use cases, skip the input DTO and pass scalar/value-object parameters directly. See [Request data § from request to action](request-data.md#from-request-to-action) for the full chain.
 
 ## What does *not* belong in a controller
 

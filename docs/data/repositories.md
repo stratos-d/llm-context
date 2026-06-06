@@ -15,7 +15,7 @@
 >
 > **See also**: [Read models](../application/read-models.md), [Models](models.md), [Builders](builders.md), [Actions](../actions.md), [Transactions](../transactions.md)
 
-A repository is the **write-side** half of the [data-access rule](../application/read-models.md#the-data-access-rule): aggregate load-to-mutate and save go through a repository, never inline in an action or controller. Reads go through a [`{Context}Reader`](../application/read-models.md); nothing else executes queries.
+A repository is the **write-side** half of the [data-access rule](../application/read-models.md#the-data-access-rule): aggregate load-to-mutate and save go through a repository, never inline in an action or controller. Reads go through a [`{Context}Query`](../application/read-models.md); nothing else executes queries.
 
 ## Required when used, never speculative
 
@@ -79,9 +79,9 @@ final class OrderRepository
 
 The Application action decides whether this runs inside a transaction.
 
-## Repository vs reader
+## Repository vs query
 
-Repositories load aggregates for behavior and persist them. Readers answer queries for screens/reports/decision-support and return DTOs. If the consumer will not mutate the returned data, it is a reader, not a repository.
+Repositories load aggregates for behavior and persist them. A `{Context}Query` answers reads for screens/reports/decision-support and returns DTOs. If the consumer will not mutate the returned data, it is a query, not a repository.
 
 ## See also
 

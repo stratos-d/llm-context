@@ -20,7 +20,7 @@
 
 When a controller renders an Inertia page with non-trivial data, the page-props array is **shaped by a dedicated class** — never inline. The default is a **per-page view model**; an Eloquent API resource is an optional single-entity serializer; lists and dashboards come from a [read model](../application/read-models.md).
 
-> Names like `DashboardPage` / `EmployeesReader` / `EmployeeResource` are illustrative.
+> Names like `DashboardPage` / `EmployeesQuery` / `EmployeeResource` are illustrative.
 
 ## Per-page view model (the default)
 
@@ -29,8 +29,8 @@ For any page that needs more than a single read model passed straight through, b
 - **One view model per Inertia page**, named after the page: `<Page>Page` (illustrative).
 - Lives at `Interfaces/<EntryPoint>/ViewModels/<Group>/<Page>Page.php`.
 - Exposes a **single public method, `build(...)`**, returning the page-props array. Same method name on every view model — convention over per-page invention.
-- **Constructor-injects its collaborators** (the context [Readers](../application/read-models.md) it composes). The page's *resolved inputs* — a record id, a resolved authorization scope, a filter — are passed to `build(...)` as arguments, not held as constructor state. The controller resolves authorization/scope and hands the result in.
-- **Composes Readers across contexts.** A page spanning two bounded contexts (e.g. an entity's own fields + that actor's roles/permissions from the authorization context) is exactly what a view model is for: the Interface layer is the only layer allowed to know both contexts. Each context still exposes its data through its own Reader / read model — the view model only *assembles* their DTO output, it does not query.
+- **Constructor-injects its collaborators** (the context [queries](../application/read-models.md) it composes). The page's *resolved inputs* — a record id, a resolved authorization scope, a filter — are passed to `build(...)` as arguments, not held as constructor state. The controller resolves authorization/scope and hands the result in.
+- **Composes queries across contexts.** A page spanning two bounded contexts (e.g. an entity's own fields + that actor's roles/permissions from the authorization context) is exactly what a view model is for: the Interface layer is the only layer allowed to know both contexts. Each context still exposes its data through its own query / read model — the view model only *assembles* their DTO output, it does not query.
 
 ### Skeleton
 
@@ -38,16 +38,16 @@ For any page that needs more than a single read model passed straight through, b
 final readonly class DashboardPage
 {
     public function __construct(
-        private EmployeesReader $employeesReader,
-        private ActivityReader $activityReader,
+        private EmployeesQuery $employeesQuery,
+        private ActivityQuery $activityQuery,
     ) {}
 
     /** @return array<string, mixed> */
     public function build(string $employeeId): array
     {
         return [
-            'employee' => $this->employeesReader->profile($employeeId)->toArray(),
-            'activity' => $this->activityReader->recentFor($employeeId)->toArray(),
+            'employee' => $this->employeesQuery->profile($employeeId)->toArray(),
+            'activity' => $this->activityQuery->recentFor($employeeId)->toArray(),
             'features' => [
                 'two_factor_required' => config('auth.two_factor_required'),
             ],
@@ -75,7 +75,7 @@ Every page view model exposes exactly `build(...)` — never `toArray()`, `forX(
 
 ## The serializer: read models, not the aggregate
 
-A view model assembles **read-model DTOs**, never the write-side aggregate. Lists, tables, dashboards, and reports come straight from a [Read model](../application/read-models.md) — if a page *is* a single read, the controller can pass the read model's result directly and skip the view model. The aggregate is the write side and is off-limits to the read path: a view model that reaches for `Model::find()` to read fields is a bug; that read belongs in a Reader.
+A view model assembles **read-model DTOs**, never the write-side aggregate. Lists, tables, dashboards, and reports come straight from a [Read model](../application/read-models.md) — if a page *is* a single read, the controller can pass the read model's result directly and skip the view model. The aggregate is the write side and is off-limits to the read path: a view model that reaches for `Model::find()` to read fields is a bug; that read belongs in a query.
 
 > Read models are Application-layer query results; view models are the delivery-layer assembly of them for one page. The same read model can feed a verbose `AdminWeb` page and a terse `PartnerApi` page through different view models.
 
@@ -85,7 +85,7 @@ An Eloquent API resource (`<Model>Resource extends JsonResource`) is an alternat
 
 - Only for **one entity's details**, never lists/tables/dashboards (those are read models).
 - Lives at `Interfaces/<EntryPoint>/Resources/<Model>Resource.php`.
-- **No queries, no `app(...)`.** Hand the resource an already-loaded model. Cross-context data (e.g. an actor's roles from another context) is **not** a resource's job — pulling it via `app(SomeReader::class)` inside `toArray()` is the anti-pattern this rule exists to stop. That composition belongs in a view model.
+- **No queries, no `app(...)`.** Hand the resource an already-loaded model. Cross-context data (e.g. an actor's roles from another context) is **not** a resource's job — pulling it via `app(SomeQuery::class)` inside `toArray()` is the anti-pattern this rule exists to stop. That composition belongs in a view model.
 
 ```php
 final class EmployeeResource extends JsonResource
@@ -134,7 +134,7 @@ The same applies to `HandleInertiaRequests::share()`. If the shared `auth.user` 
 
 - **Authorization decisions.** A view model may *include* a resolved boolean flag (`'can_disable' => ...`) handed to it, but the decision itself is made at the controller boundary via the authorization contract — never computed inside view data. See [Authorization](../authorization.md).
 - **Side effects.** View data is a transformation, not a write surface.
-- **Queries and service location.** A view model composes Readers that were **injected**; it does not call `Model::query()` or `app(...)`. A resource receives an already-loaded model and adds no queries. Any read belongs in a [Reader](../application/read-models.md).
+- **Queries and service location.** A view model composes queries that were **injected**; it does not call `Model::query()` or `app(...)`. A resource receives an already-loaded model and adds no queries. Any read belongs in a [query](../application/read-models.md).
 
 ## See also
 

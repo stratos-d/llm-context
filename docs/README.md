@@ -33,7 +33,7 @@ This directory holds reusable architectural and operational guidance for Laravel
 - [Jobs](jobs.md) — queued use-case delivery.
 - [Domain events](domain-events.md) — event naming, payloads, aggregate recording, dispatch timing.
 - [Services](services.md) — concrete service wrappers around framework/vendor SDKs.
-- [Read models](application/read-models.md) — the `{Context}Reader` read surface, the data-access rule, filters, and projection DTOs.
+- [Read models](application/read-models.md) — the `{Context}Query` read surface, read-model DTOs, the data-access rule, and filters.
 
 ### HTTP / Delivery
 

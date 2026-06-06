@@ -183,8 +183,9 @@ Result-object rules:
 - Constructor-inject dependencies; do not call `app()` inside method bodies.
 - Inject concrete services unless a port/interface is justified.
 - Prefer IDs, primitives, value objects, and pure Application input DTOs over route-bound Eloquent models.
-- Application input DTOs live near the action, either at `Application/<ContextOrUseCase>/<Verb><Noun>Input.php` or `Application/<ContextOrUseCase>/Inputs/<Verb><Noun>Input.php`.
-- Do not accept request data classes from `Interfaces/<EntryPoint>/Requests/`; controllers translate request data into scalars, value objects, or Application input DTOs.
+- **When a write takes three or more inputs, or any `list`/array, accept a single `<Verb><Noun>Input` DTO** rather than a long parameter list. Trivial one- or two-scalar writes stay as scalar parameters.
+- Application input DTOs are a plain `final readonly class` (never a `spatie/laravel-data` object) and live near the action, at `Application/<ContextOrUseCase>/<Verb><Noun>Input.php` or `Application/<ContextOrUseCase>/Inputs/<Verb><Noun>Input.php`.
+- Do not accept request data classes from `Interfaces/<EntryPoint>/Requests/`. The request object maps itself to the input DTO via `toInput()` at the delivery boundary — see [Request data § from request to action](http/request-data.md#from-request-to-action).
 - Load the aggregate inside the action, especially for behavior-heavy operations and transactional writes.
 - Accept aggregate roots only when the caller legitimately owns the loaded aggregate and no transaction/reload boundary is needed.
 - Prefer identity value objects for cross-context references.
