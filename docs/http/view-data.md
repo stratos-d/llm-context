@@ -3,8 +3,8 @@
 > **Owns**
 >
 > - Inertia page-prop shaping rules
-> - When to use Eloquent API resources (single-entity detail)
-> - When to use view models / presenters (multi-source pages)
+> - The per-page view model (the default for any non-trivial page)
+> - When to use an Eloquent API resource (optional single-entity detail)
 > - The boundary with [Read models](../application/read-models.md) (lists, dashboards, reports)
 >
 > **Forbids**
@@ -13,69 +13,79 @@
 > - Page-prop shaping inside `HandleInertiaRequests` for non-trivial actor data
 > - Authorization checks dressed up as view data
 > - Loading aggregates to render lists or dashboards — see [Read models](../application/read-models.md)
+> - More than one public shaping method on a view model — the entry point is always `build(...)`
+> - Queries or `app(...)` service location inside a view model or resource
 >
 > **See also**: [Controllers](controllers.md), [Read models](../application/read-models.md), [Models](../data/models.md), [Architecture](../architecture.md)
 
-When a controller renders an Inertia page with non-trivial data, the page-props array is **shaped by a dedicated class** — never inline. There are three shaping options, picked by data source:
+When a controller renders an Inertia page with non-trivial data, the page-props array is **shaped by a dedicated class** — never inline. The default is a **per-page view model**; an Eloquent API resource is an optional single-entity serializer; lists and dashboards come from a [read model](../application/read-models.md).
 
-- One entity's details → an [Eloquent API resource](#the-two-shaping-options).
-- A page composed from multiple sources → a [view model](#the-two-shaping-options).
-- A list / table / dashboard / report → a [read model](../application/read-models.md).
+> Names like `DashboardPage` / `EmployeesReader` / `EmployeeResource` are illustrative.
 
-> Names like `Employee` / `EmployeeResource` / `DashboardViewModel` are illustrative.
+## Per-page view model (the default)
 
-## The two shaping options
+For any page that needs more than a single read model passed straight through, build a **view model per page**:
 
-Pick the one that fits the data source:
+- **One view model per Inertia page**, named after the page: `<Page>Page` (illustrative).
+- Lives at `Interfaces/<EntryPoint>/ViewModels/<Group>/<Page>Page.php`.
+- Exposes a **single public method, `build(...)`**, returning the page-props array. Same method name on every view model — convention over per-page invention.
+- **Constructor-injects its collaborators** (the context [Readers](../application/read-models.md) it composes). The page's *resolved inputs* — a record id, a resolved authorization scope, a filter — are passed to `build(...)` as arguments, not held as constructor state. The controller resolves authorization/scope and hands the result in.
+- **Composes Readers across contexts.** A page spanning two bounded contexts (e.g. an entity's own fields + that actor's roles/permissions from the authorization context) is exactly what a view model is for: the Interface layer is the only layer allowed to know both contexts. Each context still exposes its data through its own Reader / read model — the view model only *assembles* their DTO output, it does not query.
 
-1. **Eloquent API resource** (`<Model>Resource extends JsonResource`)
-   - For **one entity's details** — a single model, with optional eager-loaded relations, projected to a thin response shape.
-   - **Not** for lists, tables, dashboards, or anything paginated. Those go through a [read model](../application/read-models.md).
-   - Lives next to the other HTTP code for its entry point at `Interfaces/<EntryPoint>/Resources/<Model>Resource.php`.
-
-2. **View model / presenter** (`<Page>ViewModel`)
-   - For pages assembled from multiple sources (multiple models, plus computed values, plus config).
-   - Plain class with public properties or a `toArray()` method.
-   - Lives at `Interfaces/<EntryPoint>/ViewModels/<Page>ViewModel.php`.
-   - May internally compose resources and read-model results.
-
-For the third case — list / table / dashboard / report screens — use a [read model](../application/read-models.md). Read models hit the database directly with tuned queries and return DTOs; they do not load aggregates. This keeps list pages from hydrating models they don't need.
-
-> Resources and view models are part of the **delivery layer**. Read models are Application-layer query results consumed by delivery. The same `Employee` model can have a different `EmployeeResource` for `AdminWeb` (verbose) and `PartnerApi` (terse). They share the model — they do not share the response shape.
-
-## Why not inline
+### Skeleton
 
 ```php
-// bad — shape leaks across controllers and breaks twice
-return Inertia::render('employees/show', [
-    'employee' => [
-        'id' => $employee->id,
-        'name' => $employee->name,
-        'two_factor_enabled' => $employee->two_factor_secret !== null
-            && $employee->two_factor_confirmed_at !== null,
-        // …
-    ],
-]);
+final readonly class DashboardPage
+{
+    public function __construct(
+        private EmployeesReader $employeesReader,
+        private ActivityReader $activityReader,
+    ) {}
+
+    /** @return array<string, mixed> */
+    public function build(string $employeeId): array
+    {
+        return [
+            'employee' => $this->employeesReader->profile($employeeId)->toArray(),
+            'activity' => $this->activityReader->recentFor($employeeId)->toArray(),
+            'features' => [
+                'two_factor_required' => config('auth.two_factor_required'),
+            ],
+        ];
+    }
+}
 ```
 
-This becomes a maintenance hazard the moment the same shape is needed on a second page (e.g. dashboard header). Two ad-hoc copies will drift. The fix:
+The controller **method-injects** the view model and hands it the resolved input:
 
 ```php
-// good — single source of truth for the shape
-return Inertia::render('employees/show', [
-    'employee' => EmployeeResource::make($employee),
-]);
+public function show(string $employee, DashboardPage $page): Response
+{
+    $this->authorize(...);   // authorization stays in the controller
+
+    return Inertia::render('dashboard', $page->build($employee));
+}
 ```
 
-The same applies to `HandleInertiaRequests::share()`. If the shared `auth.user` payload is anything more than `id` + `email`, build a resource:
+Method injection keeps the controller constructor focused on its write collaborators; each action resolves only the page it renders.
 
-```php
-'auth' => [
-    'user' => $request->user() === null ? null : EmployeeResource::make($request->user()),
-],
-```
+### One `build()` method, even for trivial pages
 
-## Eloquent API resource skeleton
+Every page view model exposes exactly `build(...)` — never `toArray()`, `forX()`, `present()`, or a per-page verb. Consistency is the point: a reader of any controller knows the props come from `$page->build(...)` without learning a new method name per screen. A near-empty page (a single list passthrough) still uses `build()`; the uniformity is worth the one-line class.
+
+## The serializer: read models, not the aggregate
+
+A view model assembles **read-model DTOs**, never the write-side aggregate. Lists, tables, dashboards, and reports come straight from a [Read model](../application/read-models.md) — if a page *is* a single read, the controller can pass the read model's result directly and skip the view model. The aggregate is the write side and is off-limits to the read path: a view model that reaches for `Model::find()` to read fields is a bug; that read belongs in a Reader.
+
+> Read models are Application-layer query results; view models are the delivery-layer assembly of them for one page. The same read model can feed a verbose `AdminWeb` page and a terse `PartnerApi` page through different view models.
+
+## Eloquent API resources (optional)
+
+An Eloquent API resource (`<Model>Resource extends JsonResource`) is an alternative **single-entity** serializer — one model projected to a thin shape. It is **optional**: a project may standardize entirely on read-model DTOs + view models and not use resources at all. Record that choice in the project overlay. Where resources *are* used:
+
+- Only for **one entity's details**, never lists/tables/dashboards (those are read models).
+- Lives at `Interfaces/<EntryPoint>/Resources/<Model>Resource.php`.
+- **No queries, no `app(...)`.** Hand the resource an already-loaded model. Cross-context data (e.g. an actor's roles from another context) is **not** a resource's job — pulling it via `app(SomeReader::class)` inside `toArray()` is the anti-pattern this rule exists to stop. That composition belongs in a view model.
 
 ```php
 final class EmployeeResource extends JsonResource
@@ -95,41 +105,40 @@ final class EmployeeResource extends JsonResource
 
 Use the model's read-only state helpers (`hasConfirmedTwoFactor()` etc.) instead of recomputing the predicate inside the resource. See [Models § what belongs on a model](../data/models.md#what-belongs-on-a-model) for the model side of that contract.
 
-## View model skeleton
+## Why not inline
 
 ```php
-final class DashboardViewModel
-{
-    public function __construct(
-        private Employee $employee,
-        private ActivitySummary $activitySummary,
-    ) {}
-
-    /** @return array<string, mixed> */
-    public function toArray(): array
-    {
-        return [
-            'employee' => EmployeeResource::make($this->employee)->resolve(),
-            'activity' => $this->activitySummary->toArray(),
-            'features' => [
-                'two_factor_required' => config('auth.two_factor_required'),
-            ],
-        ];
-    }
-}
+// bad — shape leaks across controllers and breaks twice
+return Inertia::render('employees/edit', [
+    'employee' => [
+        'id' => $employee->id,
+        'name' => $employee->name,
+        'two_factor_enabled' => $employee->two_factor_secret !== null
+            && $employee->two_factor_confirmed_at !== null,
+        // …
+    ],
+    'roles' => Role::all()->pluck('name'),   // and a cross-context query, inline
+]);
 ```
 
-Compose resources inside view models — do not duplicate the resource's shape.
+This becomes a maintenance hazard the moment the same shape is needed on a second page, and it buries a cross-context read in the controller. The fix is a per-page view model:
+
+```php
+// good — one home for the page's shape and its cross-context composition
+return Inertia::render('employees/edit', $page->build($employee));
+```
+
+The same applies to `HandleInertiaRequests::share()`. If the shared `auth.user` payload is anything more than `id` + `email`, shape it through a resource or a small shared view model — not an inline array.
 
 ## What does not belong in view data
 
-- **Authorization decisions.** A resource may include a boolean flag like `'can_disable' => $request->user()->can('disable', $employee)`, but the resource is not the place for the authorization logic itself; that lives in policies.
-- **Side effects.** A resource is a transformation, not a write surface.
-- **Database queries beyond what is already loaded.** If a resource lazy-loads a relation, it produces N+1 queries. Eager-load in the controller (or via a builder helper, see [Builders](../data/builders.md)) and then hand the loaded model to the resource.
+- **Authorization decisions.** A view model may *include* a resolved boolean flag (`'can_disable' => ...`) handed to it, but the decision itself is made at the controller boundary via the authorization contract — never computed inside view data. See [Authorization](../authorization.md).
+- **Side effects.** View data is a transformation, not a write surface.
+- **Queries and service location.** A view model composes Readers that were **injected**; it does not call `Model::query()` or `app(...)`. A resource receives an already-loaded model and adds no queries. Any read belongs in a [Reader](../application/read-models.md).
 
 ## See also
 
-- [Read models](../application/read-models.md) — the right home for list / table / dashboard / report data.
-- [Controllers](controllers.md) — where resources / view models / read-model results are constructed.
+- [Read models](../application/read-models.md) — the right home for list / table / dashboard / report data, and the DTOs view models assemble.
+- [Controllers](controllers.md) — where view models are method-injected and read-model results are constructed.
 - [Models](../data/models.md) — the source of read-only state helpers resources rely on.
 - [Architecture § layer responsibilities](../architecture.md#layer-responsibilities) — view-data shaping is the read-side counterpart of action invocation.
